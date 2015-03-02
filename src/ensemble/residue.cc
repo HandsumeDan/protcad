@@ -310,6 +310,10 @@ residue::~residue()
 	howMany--;
 }
 
+void residue::removeResidue()
+{
+    howMany--;
+}
 
 // ************************************************************************
 // ************************************************************************
@@ -3042,21 +3046,15 @@ double residue::intraSoluteEnergy()
 	{
 		if (!itsAtoms[i]->getSilentStatus())
 		{
-			// ** get solvationEnergyScore
-            vector <double> tempSolvEnergy = this->calculateSolvationEnergy(i);
-            proteinSolventEnergy += tempSolvEnergy[0];
-            solventSolventEnergy += tempSolvEnergy[1];
-
 			for(UInt j=i+1; j<itsAtoms.size(); j++)
 			{
 				if (!itsAtoms[j]->getSilentStatus())
 				{
-					bonded = isSeparatedByOneOrTwoBonds(i,j);
+                    bonded = isSeparatedByOneOrTwoBonds(i,j);
 					if (!bonded)
 					{
-						// ** get dielectric average and distance
+                        // ** get distance
 						distanceSquared = itsAtoms[i]->distanceSquared(itsAtoms[j]);
-						dielectric = (itsAtoms[i]->getDielectric() + itsAtoms[j]->getDielectric())/2;
 
 						// ** intra AMBER vdW
 						if (residueTemplate::itsAmberVDW.getScaleFactor() != 0.0 )
@@ -3075,15 +3073,22 @@ double residue::intraSoluteEnergy()
 							vdwEnergy += tempvdwEnergy;
 						}
 
-						// ** intra AMBER Electrostatics
-    		      				if (residueTemplate::itsAmberElec.getScaleFactor() != 0.0)
-	  		     			{
-							UInt resType1 = itsType;
-							UInt atomType1 = i;
-							UInt resType2 = itsType;
-							UInt atomType2 = j;
-							double tempAmberElecEnergy = residueTemplate::getAmberElecSoluteEnergySQ(resType1, atomType1, resType2, atomType2, distanceSquared, dielectric);
-							amberElecEnergy += tempAmberElecEnergy;
+                        // ** intra AMBER Electrostatics
+                        if (residueTemplate::itsAmberElec.getScaleFactor() != 0.0)
+                        {
+                            // ** get solvationEnergyScore and dielectric
+                            dielectric = (itsAtoms[i]->getDielectric() + itsAtoms[j]->getDielectric())/2;
+                            vector <double> tempSolvEnergy = this->calculateSolvationEnergy(i);
+                            proteinSolventEnergy += tempSolvEnergy[0];
+                            solventSolventEnergy += tempSolvEnergy[1];
+
+                            // **calc coulombic energy
+                            UInt resType1 = itsType;
+                            UInt atomType1 = i;
+                            UInt resType2 = itsType;
+                            UInt atomType2 = j;
+                            double tempAmberElecEnergy = residueTemplate::getAmberElecSoluteEnergySQ(resType1, atomType1, resType2, atomType2, distanceSquared, dielectric);
+                            amberElecEnergy += tempAmberElecEnergy;
 						}
 					}
 				}
@@ -3092,7 +3097,7 @@ double residue::intraSoluteEnergy()
 	}
 
 	// total
-    intraEnergy = (vdwEnergy + amberElecEnergy) + (proteinSolventEnergy/solventSolventEnergy);
+    intraEnergy = vdwEnergy + amberElecEnergy + (proteinSolventEnergy - solventSolventEnergy);
 	return intraEnergy;
 }
 
@@ -3104,7 +3109,7 @@ vector <double> residue::calculateSolvationEnergy(UInt _atomIndex)
     double charge = residueTemplate::itsAmberElec.getItsCharge(itsType, _atomIndex);
     double chargeSquared = charge*charge;
     double proteinSolvent = -166*(atomDielectric/80)*(chargeSquared/9);
-    double solventSolvent = -166*(1/atomDielectric)*(0.64/2.5);
+    double solventSolvent = 0;//-166*(atomDielectric/80)*(0.16/9);
     solvationEnergy[0] = proteinSolvent;
     solvationEnergy[1] = solventSolvent;
     itsAtoms[_atomIndex]->setSolvationEnergy(proteinSolvent);
@@ -3304,12 +3309,11 @@ double residue::interSoluteEnergy(residue* _other)
 						distanceSquared = itsAtoms[i]->inCubeWithDistSQ(_other->itsAtoms[j], cutoffDistanceSquared);
 						if (distanceSquared != 0.0 && distanceSquared != 999.0 && distanceSquared <= cutoffDistanceSquared)
 						{
-							// ** get dielectric average
-							dielectric = (itsAtoms[i]->getDielectric() + _other->itsAtoms[j]->getDielectric())/2;
-							
 							// ** inter AMBER Electrostatics
 							if (residueTemplate::itsAmberElec.getScaleFactor() != 0.0)
 							{
+                                // ** get dielectric average
+                                dielectric = (itsAtoms[i]->getDielectric() + _other->itsAtoms[j]->getDielectric())/2;
 								UInt resType1 = itsType;
 								UInt resType2 = _other->itsType;
 								UInt index1 = i;
