@@ -1,11 +1,8 @@
 /**********************************************************************
   *********************************************************************
  	filename: residue_basic.cpp
-
  	contents: class residue implemention
-
  	static variables defined: howMany
-
  	functions defined:
 				constructors
 				destructors
@@ -21,8 +18,13 @@
 typedef vector<atom*>::iterator iterATOM;
 vector<residueTemplate> residue::dataBase;
 bool residue::dataBaseBuilt = false;
-double residue::cutoffDistance = 10.0;
-double residue::cutoffDistanceSquared = 100.0;
+double residue::temperature = 300.0;
+double residue::HsolvationFactor = 1.0;
+double residue::EsolvationFactor = 1.0;
+double residue::cutoffDistance = 8;
+double residue::cutoffDistanceSquared = residue::cutoffDistance*residue::cutoffDistance;
+double residue::cutoffCubeVolume = pow((residue::cutoffDistance*2),3);
+
 void residue::setupDataBase()
 {	if (!dataBaseBuilt)
 	{	residue* dummyRes = new residue(1);
@@ -48,6 +50,7 @@ void residue::setupDataBase(const bool _Hflag, const bool _HPflag)
 }
 
 UInt residue::howMany = 0;
+
 
 // Constructors and Utilities
 
@@ -386,13 +389,11 @@ void residue::buildConnectivity()
 {	UInt tempInt;
 	vector<UInt> intVector;
 	intVector.resize(0);
-
 	cout << "itsType = " << itsType << endl;
 	for (UInt i=0; i<dataBase[itsType].connectivity.size(); i++)
 	{	cout << dataBase[itsType].connectivity[i] << " ";
 	}
 	cout << endl;
-
 	for(UInt i=0; i< dataBase[itsType].connectivity.size(); i++)
 	{	tempInt = dataBase[itsType].connectivity[i];
 		if (tempInt == 0)
@@ -625,7 +626,7 @@ void residue::deleteAtom(const UInt _atomIndex)
 			// as though the atom never existed in the first place
 		}
 		// We're going to allow ASP and GLU to be unprotonated
-		if ( (itsAtoms[_atomIndex]->getName() == "HD2" && getType() == "ASP") ||
+        if ( (itsAtoms[_atomIndex]->getName() == "HD2" && getType() == "ASP") ||
                      (itsAtoms[_atomIndex]->getName() == "HE2" && getType() == "GLU") )
 		{	// this should be allowed
 			if (theParent)
@@ -651,7 +652,7 @@ void residue::deleteAtom(const UInt _atomIndex)
 			{	thePreviousSib->setChild(0);
 			}
 			delete itsAtoms[_atomIndex];
-			iterATOM firstAtom;
+            iterATOM firstAtom;
 			firstAtom = itsAtoms.begin();
 			itsAtoms.erase(firstAtom + _atomIndex);
 		}
@@ -741,8 +742,8 @@ void residue::buildDataBase()
 	// fourth build rotamerLib
 	buildRotamerLib();
 	// indicate the type base is built
-	for(UInt i=0;i<dataBase.size();i++)
-	{	dataBase[i].initializeHasPolarHRotamers();  }
+	//for(UInt i=0;i<dataBase.size();i++)
+	//{	dataBase[i].initializeHasPolarHRotamers();  }
 	dataBaseBuilt = true;
 
 	// now that database has been constructed, build electrostatics forcefields
@@ -1335,7 +1336,7 @@ void residue::interpretBondingPattern()
 residue* residue::mutate(const UInt _newTypeIndex)
 {
 	//cout << "Entering residue::mutate" << endl;
-	residue* newAA = new residue( _newTypeIndex, hydrogensOn );
+    residue* newAA = new residue( _newTypeIndex, hydrogensOn );
 	//cout << "hydrogensOn = " << hydrogensOn << endl;
 	//residue* newAA = new residue( _newTypeIndex );
 	UInt numbpt = getNumBpt(_newTypeIndex);
@@ -1485,35 +1486,37 @@ residue* residue::mutate(const UInt _newTypeIndex)
 // now, since we're changing the backbone coordinates, make
 // sure that the amide hydrogen H is in the right place...
 // all other hydrogens should have been taken care of by the
-// code above which sets the coordinates of the branchpoint atoms...
+// code above which sets the coordinates of the branchpoint atoms...*/
 	if (hydrogensOn)
 	{
 		// get the index of "H" if it exists
 		string name = "H";
-		int HIndexNew = dataBase[_newTypeIndex].getAtomIndexOf(name);
-		int HIndexOld = dataBase[getTypeIndex()].getAtomIndexOf(name);
-		atom* pHNew = newAA->getAtom(HIndexNew);
-		atom* pHOld = getAtom(HIndexOld);
-		if (pHNew)
-		{	// OK, the new AA has an H
-			if (pHOld)
-			{	// OK, the old AA has an H
-				dblVec theCoords = pHOld->getCoords();
-				pHNew->setCoords(theCoords);
-			}
-			else
-			{
-				// I'm not sure where to put the H
-				// need to fix this eventually !!!
-			}
-		}
-		else
-		{
-			//nothing needs to be done - no H in new residue
-		}
+        UInt HIndex = 99;
+        for (UInt i = 0; i < newAA->itsAtoms.size(); i++)
+        {
+            //cout << itsAtoms[i]->getName() << " ";
+            string itsName = newAA->itsAtoms[i]->getName();
+            if (itsName == name)
+            {
+                HIndex = i;
+            }
+        }
+        if (HIndex != 99)
+        {
+            atom* pHNew = newAA->getAtom(HIndex);
+            if (pItsPrevRes)
+            {
+                dblVec newCoords(3);
+                dblVec prevCarbon = pItsPrevRes->getCoords("C");
+                dblVec prevOxygen = pItsPrevRes->getCoords("O");
+                dblVec itsNitrogen = getCoords("N");
+                newCoords[0] = ((prevCarbon[0]-prevOxygen[0])*0.8)+itsNitrogen[0];
+                newCoords[1] = ((prevCarbon[1]-prevOxygen[1])*0.8)+itsNitrogen[1];
+                newCoords[2] = ((prevCarbon[2]-prevOxygen[2])*0.8)+itsNitrogen[2];
+                pHNew->setCoords(newCoords); // translate Hydrogen to same plane as C=O of prev residue and axis of Nitrogen
+            }
+        }
 	}
-*/
-
 	return newAA;
 }
 
@@ -1703,6 +1706,7 @@ void residue::setChi(const UInt _bpt, const UInt _index, const double _angle)
 	ASSERT(currentChi < 1e5 && currentChi > -1e5);
 	double diff = _angle - currentChi;
 	setChiByDelta(_bpt, _index, diff);
+    setMoved(1);
 //	calculateSidechainDihedralAngles();
 }
 
@@ -1865,7 +1869,7 @@ double residue::getPsi()
 
 double residue::getAngle(UInt angleType)
 {
-	double tempdouble;
+    double tempdouble = 0.0;
 	if (angleType == 0) //phi
 	{	
 		if (pItsPrevRes != 0)
@@ -2224,6 +2228,7 @@ void residue::rotate(UInt _first, UInt _second, double _theta)
 	{	backboneRotation = true;
 	}
 	rotate(pAtom1, pAtom2, _theta, backboneRotation);
+
 }
 
 
@@ -2319,6 +2324,7 @@ void residue::rotateLocal(atom* _pAtom1, atom* _pAtom2, double deltaTheta, doubl
 	#ifdef __RES_DEBUG
 	_pAtom2->queryChildrensCoords();
 	#endif
+
 }
 
 void residue::rotateDihedralLocal(atom* _pAtom1, atom* _pAtom2, double _deltaTheta, UInt _direction)
@@ -2391,6 +2397,7 @@ void residue::rotateDihedralLocal(atom* _pAtom1, atom* _pAtom2, double _deltaThe
 	#ifdef __RES_DEBUG
 	_pAtom2->queryChildrensCoords();
 	#endif
+
 }
 
 void residue::rotateDihedral(atom* _pAtom1, atom* _pAtom2, double _deltaTheta, UInt _direction)
@@ -2467,6 +2474,7 @@ void residue::rotateDihedral(atom* _pAtom1, atom* _pAtom2, double _deltaTheta, U
 	#ifdef __RES_DEBUG
 	_pAtom2->queryChildrensCoords();
 	#endif
+
 }
 
 void residue::rotate(atom* _pAtom1, atom* _pAtom2, double _theta,
@@ -2544,6 +2552,7 @@ void residue::rotate(atom* _pAtom1, atom* _pAtom2, double _theta,
 	cout << _pAtom2->getName() << " " << _pAtom2->getCoords() << endl;
 	_pAtom2->queryChildrensCoords();
 #endif
+
 }
 
 void residue::rotate(const point& _point, const dblMat& _RMatrix )
@@ -2592,6 +2601,7 @@ void residue::rotate_new(atom* _pivotAtom, const dblMat& _RMatrix)
 
 	_pivotAtom->translate(backHome);
 	_pivotAtom->translateChildren(backHome);
+
 }
 
 void residue::rotate_new(atom* _pivotAtom, atom* _firstAtom, const dblMat& _RMatrix)
@@ -2606,6 +2616,7 @@ void residue::rotate_new(atom* _pivotAtom, atom* _firstAtom, const dblMat& _RMat
 
 	_firstAtom->translate(backHome);
 	_firstAtom->translateChildren(backHome);
+
 }
 
 
@@ -2701,9 +2712,11 @@ void residue::rotate(atom* _pAtom, const dblVec& _R_axis, const double _theta)
 } 
                                                     
 void residue::translate(const dblVec& _dblVec)
-{	for (UInt i=0; i < itsAtoms.size(); i++)
+{
+    for (UInt i=0; i < itsAtoms.size(); i++)
 	{	itsAtoms[i]->translate(_dblVec);
 	}
+
 }
 
 void residue::recursiveTranslateLocal(dblVec& _dblVec, int direction)
@@ -2789,6 +2802,7 @@ void residue::transform(const dblMat& _dblMat)
 {	for (UInt i=0; i < itsAtoms.size(); i++)
 	{	itsAtoms[i]->transform(_dblMat);
 	}
+    setMoved(1);
 }
 
 
@@ -2931,8 +2945,8 @@ double residue::BBEnergy()
 					}
 
 					// ** intra AMBER Electrostatics
-    		        		if (threeBonds && !twoBonds && residueTemplate::itsAmberElec.getScaleFactor() != 0.0 && itsType > 19)
-       		        	{
+					if (threeBonds && !twoBonds && residueTemplate::itsAmberElec.getScaleFactor() != 0.0 && itsType > 19)
+					{
 						resType1 = itsType;
 						UInt atomType1 = i;
 						resType2 = itsType;
@@ -2957,7 +2971,7 @@ double residue::intraEnergy()
 	double vdwEnergy = 0.0;
 	double pmfEnergy = 0.0;
 	double amberElecEnergy = 0.0;
-	bool threeBonds;
+    bool twoBonds;
 
 	for(UInt i=0; i<itsAtoms.size(); i++)
 	{
@@ -2969,7 +2983,7 @@ double residue::intraEnergy()
 				{
 					//distance = itsAtoms[i]->distance(itsAtoms[j]);
 					distanceSquared = itsAtoms[i]->distanceSquared(itsAtoms[j]);
-					threeBonds = isSeparatedByFewBonds(i,j);
+					twoBonds = isSeparatedByOneOrTwoBonds(i,j);
 					// ** intra AMBER vdW
 					if (residueTemplate::itsAmberVDW.getScaleFactor() != 0.0 )
 					{
@@ -2983,7 +2997,7 @@ double residue::intraEnergy()
 								index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][1];
 								index2 = dataBase[itsType].itsAtomEnergyTypeDefinitions[j][1];
 						}
-						if (!threeBonds)
+						if (!twoBonds)
 						{
 							double tempvdwEnergy = residueTemplate::getVDWEnergySQ(index1,index2,distanceSquared);
 							vdwEnergy += tempvdwEnergy;
@@ -2993,7 +3007,7 @@ double residue::intraEnergy()
 					// ** intra AMBER Electrostatics
 					if (residueTemplate::itsAmberElec.getScaleFactor() != 0.0)
 					{
-						if (!threeBonds)
+						if (!twoBonds)
 						{
 							UInt resType1 = itsType;
 							UInt atomType1 = i;
@@ -3002,15 +3016,6 @@ double residue::intraEnergy()
 							double tempAmberElecEnergy = residueTemplate::getAmberElecEnergySQ(resType1, atomType1, resType2, atomType2, distanceSquared);
 							amberElecEnergy += tempAmberElecEnergy;
 						}
-					}
-					// ** intra PMF
-					if (residueTemplate::itsPMF.getScaleFactor() != 0.0)
-					{
-
-						double distance = sqrt(distanceSquared);
-						index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][2];
-						index2 = dataBase[itsType].itsAtomEnergyTypeDefinitions[j][2];
-						pmfEnergy += residueTemplate::getPMFEnergy(index1, index2, distance);
 					}
 				}
 			}
@@ -3031,176 +3036,189 @@ double residue::intraEnergy()
 
 double residue::intraSoluteEnergy()
 {	
-	double distanceSquared;
-	int index1;
-	int index2;
 	double intraEnergy = 0.0;
-	double vdwEnergy = 0.0;
-	double amberElecEnergy = 0.0;
-    double solventSolventEnergy = 0.0;
-    double proteinSolventEnergy = 0.0;
-	double dielectric;	
-	bool bonded;
-	
+    bool threeBonds;
 	for(UInt i=0; i<itsAtoms.size(); i++)
 	{
 		if (!itsAtoms[i]->getSilentStatus())
 		{
+			// ** get solvationEnergy
+			vector <double> tempSolvEnergy = calculateSolvationEnergy(i);
+			intraEnergy += tempSolvEnergy[0];
+			intraEnergy += tempSolvEnergy[1];
 			for(UInt j=i+1; j<itsAtoms.size(); j++)
 			{
 				if (!itsAtoms[j]->getSilentStatus())
 				{
-                    bonded = isSeparatedByOneOrTwoBonds(i,j);
-					if (!bonded)
+					threeBonds = isSeparatedByFewBonds(i,j);
+					if (!threeBonds)
 					{
-                        // ** get distance
-						distanceSquared = itsAtoms[i]->distanceSquared(itsAtoms[j]);
+						// ** get distance
+						double distanceSquared = itsAtoms[i]->distanceSquared(itsAtoms[j]);
 
 						// ** intra AMBER vdW
 						if (residueTemplate::itsAmberVDW.getScaleFactor() != 0.0 )
 						{
-							if (hydrogensOn)
-							{
-									index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][0];
-									index2 = dataBase[itsType].itsAtomEnergyTypeDefinitions[j][0];
-							}
-							else
-							{
-									index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][1];
-									index2 = dataBase[itsType].itsAtomEnergyTypeDefinitions[j][1];
-							}		
+							int index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][0];
+							int index2 = dataBase[itsType].itsAtomEnergyTypeDefinitions[j][0];
 							double tempvdwEnergy = residueTemplate::getVDWEnergySQ(index1,index2,distanceSquared);
-							vdwEnergy += tempvdwEnergy;
+							intraEnergy += tempvdwEnergy;
 						}
 
-                        // ** intra AMBER Electrostatics
-                        if (residueTemplate::itsAmberElec.getScaleFactor() != 0.0)
-                        {
-                            // ** get solvationEnergyScore and dielectric
-                            dielectric = (itsAtoms[i]->getDielectric() + itsAtoms[j]->getDielectric())/2;
-                            vector <double> tempSolvEnergy = this->calculateSolvationEnergy(i);
-                            proteinSolventEnergy += tempSolvEnergy[0];
-                            solventSolventEnergy += tempSolvEnergy[1];
+						// ** intra Electrostatics
+						if (residueTemplate::itsAmberElec.getScaleFactor() != 0.0)
+						{
+							// ** get dielectric average of atoms
+							double dielectric = (itsAtoms[i]->getDielectric() + itsAtoms[j]->getDielectric()) * 0.5;
 
-                            // **calc coulombic energy
-                            UInt resType1 = itsType;
-                            UInt atomType1 = i;
-                            UInt resType2 = itsType;
-                            UInt atomType2 = j;
-                            double tempAmberElecEnergy = residueTemplate::getAmberElecSoluteEnergySQ(resType1, atomType1, resType2, atomType2, distanceSquared, dielectric);
-                            amberElecEnergy += tempAmberElecEnergy;
+							// **calc coulombic energy
+							UInt resType1 = itsType;
+							UInt atomType1 = i;
+							UInt resType2 = itsType;
+							UInt atomType2 = j;
+							double tempAmberElecEnergy = residueTemplate::getAmberElecSoluteEnergySQ(resType1, atomType1, resType2, atomType2, distanceSquared, dielectric);
+							intraEnergy += tempAmberElecEnergy;
 						}
 					}
 				}
 			}
 		}
 	}
-
-	// total
-    intraEnergy = vdwEnergy + amberElecEnergy + (proteinSolventEnergy - solventSolventEnergy);
 	return intraEnergy;
 }
 
 vector <double> residue::calculateSolvationEnergy(UInt _atomIndex)
 {
 	//--requires update of dielectrics at protein level to be accurate.
-    vector <double> solvationEnergy(2);
-	double atomDielectric = itsAtoms[_atomIndex]->getDielectric();
-    double charge = residueTemplate::itsAmberElec.getItsCharge(itsType, _atomIndex);
-    double chargeSquared = charge*charge;
-    double proteinSolvent = -166*(atomDielectric/80)*(chargeSquared/9);
-    double solventSolvent = 0;//-166*(atomDielectric/80)*(0.16/9);
-    solvationEnergy[0] = proteinSolvent;
-    solvationEnergy[1] = solventSolvent;
-    itsAtoms[_atomIndex]->setSolvationEnergy(proteinSolvent);
+    vector <double> solvationEnergy;
+    int atomVDWtype = dataBase[itsType].itsAtomEnergyTypeDefinitions[_atomIndex][0];
+	double solvationRadius = residueTemplate::getVDWRadius(52);
+    double solvatedRadius = residueTemplate::getVDWRadius(atomVDWtype)+solvationRadius;
+    double proteinSolventEnthalpy = 0.0;
+    double proteinSolventEntropy = 0.0;
+    double totalVol = cutoffCubeVolume;
+
+    if (EsolvationFactor != 0.0)
+    {   //Born Electrostatic solvation  Still WC, et al J Am Chem Soc 1990
+        double atomDielectric = itsAtoms[_atomIndex]->getDielectric();
+        double charge = residueTemplate::itsAmberElec.getItsCharge(itsType, _atomIndex);
+        double chargeSquared = charge*charge;
+		double waterDielectric = 79; // -0.3195 * (temperature-274.15) + 86.115; Malmberg and Maryott, 1956 JRNBS
+        proteinSolventEnthalpy +=((-166*chargeSquared/(solvatedRadius*waterDielectric))/(waterDielectric-atomDielectric))*EsolvationFactor;
+    }
+
+    if (HsolvationFactor != 0.0)
+    {   //Gill Hydrophobic solvation  S.J.Gill, S.F.Dec. J Phys. Chem. 1985
+		double waters = itsAtoms[_atomIndex]->getNumberofWaters();
+        double atomShellVol = 4.18*pow((solvatedRadius),3);
+        double atomVol = residueTemplate::getVolume(atomVDWtype);
+        double waterShellVol = atomShellVol-atomVol;
+		double shellVolFraction = waterShellVol/totalVol;
+        int shellWaters = waters*shellVolFraction;
+        if (notHydrogen(_atomIndex)) //heavy atoms only used for non-polar solvation
+        {
+			proteinSolventEntropy = (-temperature*0.0019872041*log(pow(0.5,(shellWaters))))*HsolvationFactor;
+        }
+
+        //TIP3P VDW water interaction R. W. Impey, and M. L. Klein, J. Chem. Phys. 79 (1983) 926-935
+        double tempvdwEnergy = residueTemplate::getVDWWaterEnergy(atomVDWtype);
+        proteinSolventEnthalpy += tempvdwEnergy*shellWaters;
+    }
+
+    //Total atom solvation Energy
+    solvationEnergy.push_back(proteinSolventEnthalpy);
+    solvationEnergy.push_back(proteinSolventEntropy);
+    itsAtoms[_atomIndex]->setSolvationEnergy(proteinSolventEntropy+proteinSolventEnthalpy);
 	return solvationEnergy;
+}
+
+double residue::getSolvationEnergy()
+{
+	double solvationEnergy = 0.0;
+	for(UInt i=0; i<itsAtoms.size(); i++)
+	{
+		solvationEnergy += itsAtoms[i]->getSolvationEnergy();
+	}
+	return solvationEnergy;
+}
+
+double residue::getDielectric()
+{
+	double dielectricTotal = 0.0;
+	for(UInt i=0; i<itsAtoms.size(); i++)
+	{
+		dielectricTotal += itsAtoms[i]->getDielectric();
+	}
+	return dielectricTotal/itsAtoms.size();
 }
 		
 vector <double> residue::calculateDielectric(residue* _other, UInt _atomIndex)
 {	
-	vector <double> chargeDensity(3);
-	chargeDensity[0] = 0.0;
-	chargeDensity[1] = 0.0;
-	chargeDensity[2] = 0.0;
-	double charges = 0.0;
-	double volumes = 0.0;
-	double atoms = 0.0;
-	double distanceSquared;
-	int atomEnergyType;
+	vector <double> polarizabilities(2);
+	polarizabilities[0] = 0.0;
+	polarizabilities[1] = 0.0;
+	double polarizability = 0.0;
+	double volume = 0.0;
+	bool inCube;
 	for(UInt i=0; i<_other->itsAtoms.size(); i++)
 	{
-		distanceSquared = itsAtoms[_atomIndex]->inCubeWithDistSQ(_other->itsAtoms[i], 81);
-		if (distanceSquared != 999.0 && distanceSquared != 0.0 && distanceSquared <= 81)
+		inCube = itsAtoms[_atomIndex]->inCube(_other->itsAtoms[i], cutoffDistance);
+		if (inCube)
 		{
-			atoms++;
-			atomEnergyType = dataBase[_other->itsType].itsAtomEnergyTypeDefinitions[i][1];
-			if (atomEnergyType == 11) charges += 1.382, volumes += 8.7;
-			if (atomEnergyType == 12 || atomEnergyType == 15) charges += 1.382, volumes += 8.7;
-			if (atomEnergyType == 13) charges += 1.836, volumes += 23.2;
-			if (atomEnergyType == 14) charges += 2.222, volumes += 36.7;
-			if (atomEnergyType == 16 || atomEnergyType == 27) charges += 1.529, volumes += 8.7;
-			if (atomEnergyType == 18 || atomEnergyType == 21) charges += 1.768, volumes += 21.3;
-			if (atomEnergyType == 22) charges += 1.45, volumes += 20.4;
-			if (atomEnergyType == 46 || atomEnergyType == 50) charges += 1.48, volumes += 13.6;
-			if (atomEnergyType == 48) charges += 1.866, volumes += 22.7;
-			if (atomEnergyType == 49) charges += 2.252, volumes += 21.4;
-			if (atomEnergyType == 55) charges += 0.46, volumes += 15.9;
-			if (atomEnergyType == 56) charges += 0.664, volumes += 18;
-			if (atomEnergyType == 57) charges += 1.05, volumes += 18;
-			if (atomEnergyType == 60) charges += 3.2684, volumes += 29.2;
-			if (atomEnergyType == 61) charges += 3.6643, volumes += 36.7;
+			int vdwIndex = dataBase[_other->itsType].itsAtomEnergyTypeDefinitions[i][0];
+			polarizability += residueTemplate::getPolarizability(vdwIndex);
+			volume += residueTemplate::getVolume(vdwIndex);
 		}
 	}
-	if (atoms != 0.0)
-	{
-		chargeDensity[0] = volumes;
-		chargeDensity[1] = charges;
-		chargeDensity[2] = 1;
-	}
-	return chargeDensity;
+	polarizabilities[0] = volume;
+	polarizabilities[1] = polarizability;
+	return polarizabilities;
 }
 
 vector <double> residue::calculateDielectric(residue* _other, atom* _atom)
 {	
-	vector <double> chargeDensity(2);
-	chargeDensity[0] = 0.0;
-	chargeDensity[1] = 0.0;
-	double charges = 0.0;
-	double volumes = 0.0;
-	double atoms = 0.0;
-	double distanceSquared;
-	int atomEnergyType;
+	vector <double> polarizabilities(2);
+	polarizabilities[0] = 0.0;
+	polarizabilities[1] = 0.0;
+	double polarizability = 0.0;
+	double volume = 0.0;
+	bool inCube;
 	for(UInt i=0; i<_other->itsAtoms.size(); i++)
 	{
-		distanceSquared = _atom->inCubeWithDistSQ(_other->itsAtoms[i], 81);
-		if (distanceSquared != 999.0 && distanceSquared != 0.0 && distanceSquared <= 81)
+		inCube = _atom->inCube(_other->itsAtoms[i], cutoffDistance);
+		if (inCube)
 		{
-			atoms++;
-			atomEnergyType = dataBase[_other->itsType].itsAtomEnergyTypeDefinitions[i][1];
-			if (atomEnergyType == 11) charges += 1.382, volumes += 8.7;
-			if (atomEnergyType == 12 || atomEnergyType == 15) charges += 1.382, volumes += 8.7;
-			if (atomEnergyType == 13) charges += 1.836, volumes += 23.2;
-			if (atomEnergyType == 14) charges += 2.222, volumes += 36.7;
-			if (atomEnergyType == 16 || atomEnergyType == 27) charges += 1.529, volumes += 8.7;
-			if (atomEnergyType == 18 || atomEnergyType == 21) charges += 1.768, volumes += 21.3;
-			if (atomEnergyType == 22) charges += 1.45, volumes += 20.4;
-			if (atomEnergyType == 46 || atomEnergyType == 50) charges += 1.48, volumes += 13.6;
-			if (atomEnergyType == 48) charges += 1.866, volumes += 22.7;
-			if (atomEnergyType == 49) charges += 2.252, volumes += 21.4;
-			if (atomEnergyType == 55) charges += 0.46, volumes += 15.9;
-			if (atomEnergyType == 56) charges += 0.664, volumes += 18;
-			if (atomEnergyType == 57) charges += 1.05, volumes += 18;
-			if (atomEnergyType == 60) charges += 3.2684, volumes += 29.2;
-			if (atomEnergyType == 61) charges += 3.6643, volumes += 36.7;
+			int vdwIndex = dataBase[_other->itsType].itsAtomEnergyTypeDefinitions[i][0];
+			polarizability += residueTemplate::getPolarizability(vdwIndex);
+			volume += residueTemplate::getVolume(vdwIndex);
 		}
 	}
-	if (atoms != 0.0)
+	polarizabilities[0] = volume;
+	polarizabilities[1] = polarizability;
+	return polarizabilities;
+}
+
+vector <double> residue::calculateDielectric(atom* _atom)
+{
+	vector <double> polarizabilities(2);
+	polarizabilities[0] = 0.0;
+	polarizabilities[1] = 0.0;
+	double polarizability = 0.0;
+	double volume = 0.0;
+	bool inCube;
+	for(UInt i=0; i < itsAtoms.size(); i++)
 	{
-		chargeDensity[0] = volumes;
-		chargeDensity[1] = charges;
-		chargeDensity[2] = 1;
+		inCube = _atom->inCube(itsAtoms[i], cutoffDistance);
+		if (inCube)
+		{
+			int vdwIndex = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][0];
+			polarizability += residueTemplate::getPolarizability(vdwIndex);
+			volume += residueTemplate::getVolume(vdwIndex);
+		}
 	}
-	return chargeDensity;
+	polarizabilities[0] = volume;
+	polarizabilities[1] = polarizability;
+	return polarizabilities;
 }
 
 
@@ -3257,16 +3275,10 @@ double residue::interEnergy(residue* _other)
 							{
 								double tempvdwEnergy = residueTemplate::getVDWEnergySQ(index1, index2, distanceSquared);
 								vdwEnergy += tempvdwEnergy;
+								
+				//				cout << i << " " << j << " " << tempvdwEnergy << endl;
+							
 							}
-						}
-
-						// ** inter PMF
-						if (residueTemplate::itsPMF.getScaleFactor() != 0.0)
-						{
-							double distance = sqrt(distanceSquared);
-							index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][2];
-							index2 = dataBase[_other->itsType].itsAtomEnergyTypeDefinitions[j][2];
-							pmfEnergy += residueTemplate::getPMFEnergy(index1, index2, distance);
 						}
 					}
 				}
@@ -3286,15 +3298,8 @@ double residue::interEnergy(residue* _other)
 
 double residue::interSoluteEnergy(residue* _other)
 {
-	double distanceSquared;
-	int index1;
-	int index2;
 	double interEnergy = 0.0;
-	double vdwEnergy = 0.0;
-	double amberElecEnergy = 0.0;
-	double dielectric;
-	bool bonded;
-
+	bool threeBonds;
 	for(UInt i=0; i<itsAtoms.size(); i++)
 	{
 		if (!itsAtoms[i]->getSilentStatus())
@@ -3303,37 +3308,34 @@ double residue::interSoluteEnergy(residue* _other)
 			{
 				if (!_other->itsAtoms[j]->getSilentStatus())
 				{
-					bonded = isSeparatedByOneOrTwoBonds(i,_other,j);
-					if (!bonded)
+					threeBonds = isSeparatedByFewBonds(this,i,_other,j);
+					if (!threeBonds)
 					{
-						distanceSquared = itsAtoms[i]->inCubeWithDistSQ(_other->itsAtoms[j], cutoffDistanceSquared);
-						if (distanceSquared != 0.0 && distanceSquared != 999.0 && distanceSquared <= cutoffDistanceSquared)
+						double distanceSquared = itsAtoms[i]->inCubeWithDistSQ(_other->itsAtoms[j], cutoffDistance);
+						if (distanceSquared != 0.0 && distanceSquared <= cutoffDistanceSquared)
 						{
+							//cout << itsResNum << " " << _other->itsResNum << endl;
 							// ** inter AMBER Electrostatics
 							if (residueTemplate::itsAmberElec.getScaleFactor() != 0.0)
 							{
-                                // ** get dielectric average
-                                dielectric = (itsAtoms[i]->getDielectric() + _other->itsAtoms[j]->getDielectric())/2;
+								// ** get dielectric average
+								double dielectric = (itsAtoms[i]->getDielectric() + _other->itsAtoms[j]->getDielectric()) * 0.5;
 								UInt resType1 = itsType;
 								UInt resType2 = _other->itsType;
 								UInt index1 = i;
 								UInt index2 = j;
-	 							double tempAmberElecEnergy = residueTemplate::getAmberElecSoluteEnergySQ(resType1, index1, resType2, index2, distanceSquared, dielectric);
-								amberElecEnergy += tempAmberElecEnergy;
+								double tempAmberElecEnergy = residueTemplate::getAmberElecSoluteEnergySQ(resType1, index1, resType2, index2, distanceSquared, dielectric);
+								interEnergy += tempAmberElecEnergy;
 							}
 
 							// ** inter AMBER vdW
 							if (residueTemplate::itsAmberVDW.getScaleFactor() != 0.0)
-							{	if (hydrogensOn)
-								{	index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][0];
-									index2 = dataBase[_other->itsType].itsAtomEnergyTypeDefinitions[j][0];
-								}
-								else
-								{	index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][1];
-									index2 = dataBase[_other->itsType].itsAtomEnergyTypeDefinitions[j][1];
-								}
+							{
+								int index1, index2;
+								index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][0];
+								index2 = dataBase[_other->itsType].itsAtomEnergyTypeDefinitions[j][0];
 								double tempvdwEnergy = residueTemplate::getVDWEnergySQ(index1, index2, distanceSquared);
-								vdwEnergy += tempvdwEnergy;
+								interEnergy += tempvdwEnergy;
 							}
 						}
 					}
@@ -3341,7 +3343,6 @@ double residue::interSoluteEnergy(residue* _other)
 			}
 		}
 	}
-	interEnergy = vdwEnergy + amberElecEnergy;
 	return interEnergy;
 }
 
@@ -3402,81 +3403,6 @@ double residue::BBEnergy(residue* _other)
 	interEnergy =  vdwEnergy + amberElecEnergy;
 	return interEnergy;
 }
-
-//begin jeff ligand energy code
-double residue::interEnergy(ligand* _other)
-{
-	double distanceSquared;
-	int index1;
-	int index2;
-	double interEnergy = 0.0;
-	double vdwEnergy = 0.0;
-        double amberElecEnergy= 0.0;
-	bool withinCutoff;
-	
-        for(UInt i=0; i<itsAtoms.size(); i++)
-	{
-		if (!itsAtoms[i]->getSilentStatus())
-		{
-			for(UInt j=0; j<_other->atomCount(); j++)
-			{
-				if (!_other->getAtom(j)->getSilentStatus())
-				{
-					withinCutoff = itsAtoms[i]->inCutoffSQ(_other->getAtom(j), cutoffDistance, cutoffDistanceSquared);
-					if (withinCutoff)
-					{
-						distanceSquared = itsAtoms[i]->distanceSquared(_other->getAtom(j));
-                                                
-                                                // ** inter AMBER elec
-                                                if (residueTemplate::itsAmberElec.getScaleFactor() != 0.0)
-                                                {
-                                                            UInt resType1 = itsType;
-                                                            UInt index1 = i;
-                                                            double ligAtomCharge= _other->getAmberElec(j);
-                                                            
-                                                            double tempAmberElecEnergy = residueTemplate::getAmberElecEnergySQ(resType1, index1, ligAtomCharge, distanceSquared);
-                                                            amberElecEnergy += tempAmberElecEnergy;
-                                                }
-
-                                                // ** inter AMBER vdW
-                                                if (residueTemplate::itsAmberVDW.getScaleFactor() != 0.0)
-                                                {	
-                                                    if (hydrogensOn)
-                                                    {	
-                                                        index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][0];
-                                                        index2 = _other->getAmberAllType(j);
-                                                    }
-                                                    else
-                                                    {	
-                                                        index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][1];
-                                                        index2 =  _other->getAmberUnitedType(j);
-                                                    }
-
-                                                    double tempvdwEnergy = residueTemplate::getVDWEnergySQ(index1, index2, distanceSquared);
-                                                    vdwEnergy += tempvdwEnergy;
-                                                }
-
-						// ** inter PMF
-                                                /*if (residueTemplate::itsPMF.getScaleFactor() != 0.0)
-                                                {
-                                                    double distance = sqrt(distanceSquared);
-                                                    index1 = dataBase[itsType].itsAtomEnergyTypeDefinitions[i][2];
-                                                    index2 = dataBase[_other->itsType].itsAtomEnergyTypeDefinitions[j][2];
-                                                    pmfEnergy += residueTemplate::getPMFEnergy(index1, index2, distance);
-                                                }*/
-						
-						
-					}//cutoff loop
-				}//ligand silent loop
-			}//ligand loop
-		}//residue silent loop
-	}//residue loop
-
-	interEnergy =vdwEnergy;
-	
-	return interEnergy;
-}
-//end jeff insert for ligand code
 
 double residue::calculateHCA_O_hBondEnergy(residue* _other)
 {
@@ -3666,6 +3592,51 @@ bool residue::isSeparatedByFewBonds(UInt _index1, UInt _index2)
 		}
 	}
 	return false;
+}
+
+UInt residue::getBondSeparation(UInt _index1, UInt _index2)
+{
+    // Note: all interaction up to and including 1-4 interactions are skipped
+
+    vector< UInt > bondedList1;
+    vector< UInt > bondedList2;
+    vector< UInt > bondedList3;
+    UInt sizeOfList1;
+    UInt sizeOfList2;
+    UInt sizeOfList3;
+
+    bondedList1 = dataBase[itsType].getBondingPattern(_index1);
+
+    if ( (sizeOfList1 = bondedList1.size()) )
+    {
+        for (UInt i=0; i < sizeOfList1; i++)
+        {
+            if (bondedList1[i] == _index2)
+            {	return 0;
+            }
+            bondedList2 = dataBase[itsType].getBondingPattern(bondedList1[i]);
+            if ( (sizeOfList2 = bondedList2.size()) )
+            {
+                for (UInt j=0; j< sizeOfList2; j++)
+                {
+                    if (bondedList2[j] == _index2)
+                    {	return 1;
+                    }
+                    bondedList3 = dataBase[itsType].getBondingPattern(bondedList2[j]);
+                    if ( (sizeOfList3 = bondedList3.size()) )
+                    {
+                        for (UInt k=0; k< sizeOfList3; k++)
+                        {
+                            if (bondedList3[k] == _index2)
+                            {	return 2;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return 99;
 }
 
 bool residue::isSeparatedByOneOrTwoBonds(UInt _index1, residue* _pRes2, UInt _index2)
@@ -3964,6 +3935,204 @@ bool residue::isSeparatedByFewBonds(residue* _pRes1, UInt _index1, residue*
 	return false;
 }
 
+UInt residue::getBondSeparation(residue* _pRes1, UInt _index1, residue*
+ _pRes2, UInt _index2)
+{
+    // Note: all interaction up to and including 1-4 interactions are skipped
+
+    // first, check if they are sequential residues
+    int theOrder = 0;
+    // is _pRes1 the residue N-terminal to _pRes2?
+    if ( _pRes1 == _pRes2->getPrevRes())
+        theOrder = 1;
+    // if _pRes1 the residue C-terminal to _pRes2?
+    if ( _pRes1 == _pRes2->getNextRes())
+        theOrder = -1;
+
+    // if they're not sequential, there's no way that their
+    // atoms can be within 3 bonds.... except if they are
+    // Cysteine sulfurs involved in a disulfide bond....
+
+    // Check for disulfide
+    if (_pRes1->getType() == "CYX" || _pRes1->getType() == "CXD" )
+    {	if (_pRes2->getType() == "CYX" ||_pRes1->getType() == "CXD" )
+        {   atom* pAtom1=_pRes1->getAtom(_index1);
+            atom* pAtom2=_pRes2->getAtom(_index2);
+            if (pAtom1->distance(pAtom2) < 3.0)
+            {
+                return 1;
+            }
+        }
+    }
+
+    // Check for SF4 Cysteine bond
+    if (_pRes1->getType() == "CYF" || _pRes1->getType() == "CFD" )
+    {	if (_pRes2->getType() == "CSF")
+        { 	atom* pAtom1=_pRes1->getAtom(_index1);
+            atom* pAtom2=_pRes2->getAtom(_index2);
+            if (pAtom1->distance(pAtom2) < 4.0)
+            {
+                return 1;
+            }
+        }
+    }
+    if (_pRes2->getType() == "CYF" || _pRes2->getType() == "CFD" )
+    {	if (_pRes1->getType() == "CSF")
+        { 	atom* pAtom1=_pRes2->getAtom(_index2);
+            atom* pAtom2=_pRes1->getAtom(_index1);
+            if (pAtom1->distance(pAtom2) < 4.0)
+            {
+                return 1;
+            }
+        }
+    }
+
+    // Check for peptide bond
+    if ((_index1 == 0 && _index2 == 2) || (_index2 == 0 && _index1 == 2))
+    {
+        atom* pAtom1=_pRes1->getAtom(_index1);
+        atom* pAtom2=_pRes2->getAtom(_index2);
+        if (pAtom1->distance(pAtom2) < 1.6)
+        {
+            return 1;
+        }
+    }
+
+    if (theOrder == 0)
+    {
+#ifdef _SKIP_DEBUG
+        cout << "Not sequential amino acids" << endl;
+#endif
+        return 99;
+    }
+
+#ifdef _SKIP_DEBUG
+    cout << "Order = " << theOrder << "  ";
+#endif
+
+    // ok, now we know we've got two sequential amino acids.
+    // find out how far the atom in question in the N-term
+    // amino acid is from the carboxyl carbon (the end).
+    UInt Cindex;
+    vector< UInt > bondedList1;
+    vector< UInt > bondedList2;
+    UInt sizeOfList1;
+    UInt sizeOfList2;
+    UInt typeOfRes1;
+    UInt typeOfRes2;
+    UInt atomIndex1;
+    UInt atomIndex2;
+
+    if (theOrder == 1)
+    {
+        typeOfRes1 = _pRes1->getTypeIndex();
+        atomIndex1 = _index1;
+        typeOfRes2 = _pRes2->getTypeIndex();
+        atomIndex2 = _index2;
+    }
+    else
+    {
+        typeOfRes1 = _pRes2->getTypeIndex();
+        atomIndex1 = _index2;
+        typeOfRes2 = _pRes1->getTypeIndex();
+        atomIndex2 = _index1;
+    }
+
+    // find the index of "C" should be at mainchain end -2
+    UInt mcsize = dataBase[typeOfRes1].mainChain.size();
+    if (mcsize > 2)
+    {	Cindex = mcsize -2;
+#ifdef _SKIP_DEBUG
+        cout << "Cindex=" << Cindex << " ";
+#endif
+    }
+    else
+    {	cout << "Error! mainChain size too small" << endl;
+        return 99;
+    }
+
+    bondedList1 = dataBase[typeOfRes1].getBondingPattern(atomIndex1);
+    UInt firstIterationLevel = 10;
+    if ( atomIndex1 == Cindex)
+    {
+        firstIterationLevel = 0;
+#ifdef _SKIP_DEBUG
+        cout << "| FirstAtom is C | ";
+#endif
+    }
+    else if ( (sizeOfList1 = bondedList1.size()) )
+    {
+        for (UInt i=0; i < sizeOfList1; i++)
+        {
+            if (bondedList1[i] == Cindex)
+            {	firstIterationLevel = 1;
+            }
+            bondedList2 = dataBase[typeOfRes1].getBondingPattern(bondedList1[i]);
+            if ( (sizeOfList2 = bondedList2.size()) )
+            {
+                for (UInt j=0; j< sizeOfList2; j++)
+                {
+                    if (bondedList2[j] == Cindex)
+                    {	firstIterationLevel = 2;
+                    }
+                }
+            }
+        }
+#ifdef _SKIP_DEBUG
+        cout << " Steps To C From atom1 =" << firstIterationLevel << "  ";
+#endif
+    }
+
+    bondedList1 = dataBase[typeOfRes2].getBondingPattern(0);
+    UInt secondIterationLevel = 10;
+
+    if (atomIndex2 == 0)
+    {	secondIterationLevel = 0;
+#ifdef _SKIP_DEBUG
+        cout << " |atom2 is N| ";
+#endif
+    }
+    else if ( (sizeOfList1 = bondedList1.size()) )
+    {
+        for (UInt i=0; i < sizeOfList1; i++)
+        {
+            if (bondedList1[i] == atomIndex2)
+            {	secondIterationLevel = 1;
+            }
+            bondedList2 = dataBase[typeOfRes2].getBondingPattern(bondedList1[i]);
+            if ( (sizeOfList2 = bondedList2.size()) )
+            {
+                for (UInt j=0; j< sizeOfList2; j++)
+                {
+                    if (bondedList2[j] == atomIndex2)
+                    {	secondIterationLevel = 2;
+                    }
+                }
+            }
+        }
+#ifdef _SKIP_DEBUG
+        cout << " Steps To N from atom2 =" << secondIterationLevel << " ";
+#endif
+    }
+
+    UInt numBonds = firstIterationLevel + secondIterationLevel;
+#ifdef _SKIP_DEBUG
+    cout << " numbonds=" << numBonds << " ";
+#endif
+    return numBonds;
+}
+
+bool residue::notHydrogen(UInt _atomIndex)
+{
+    string atomType = getTypeStringFromAtomNum(_atomIndex);
+    if (atomType != "H")
+    {
+        return true;
+    }
+    return false;
+}
+
+
 bool residue::isBonded(UInt _index1, UInt _index2)
 {
 	vector< UInt > bondedList;
@@ -4116,6 +4285,10 @@ double residue::getSelfEnergy(residue* _other)
     return selfEnergy;
 }
 
+void residue::setMoved(UInt _moved)
+{
+    moved = _moved;
+}
 
 double residue::getVolume(UInt _method)
 {
@@ -4202,7 +4375,7 @@ void residue::coilcoil(const double _pitch)
         double y = itsAtoms[i]->getY();
         double z = itsAtoms[i]->getZ();
 
-        double theta = -2 * 3.14159 * z / _pitch;
+        double theta = -6.28318 * z / _pitch;
 
         double xcoil = x * cos(theta) - y * sin(theta);
         double ycoil = x * sin(theta) + y * cos(theta);
@@ -4265,20 +4438,6 @@ double residue::tabulateSurfaceArea(UInt _atomIndex)
 	return surfaceArea;
 }
 
-double residue::tabulateSolvationEnergy(UInt _param)
-{
-    double solvationEnergy = 0.0;
-    int atomType;
-
-    for (UInt i = 0; i < itsAtoms.size(); i ++)
-    {
-        double surfaceArea = itsAtoms[i]->calculateExposedSASA();
-        atomType = dataBase[itsType].getAtomEnergyTypeDefinition(i,4);
-        solvationEnergy += residueTemplate::getSolvationEnergy(surfaceArea, atomType, _param);
-    }
-    return solvationEnergy;
-}
-
 dblVec residue::getBackBoneCentroid()
 {
 	dblVec centroid(3);
@@ -4286,4 +4445,3 @@ dblVec residue::getBackBoneCentroid()
 	centroid = temp->getCoords();
 	return centroid;
 }
-

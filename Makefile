@@ -14,11 +14,11 @@ SHELL = /bin/sh
 TARGETS = example
 
 .SUFFIXES:
-.SUFFIXES: .cc .o .h .f .a
+.SUFFIXES: .cc .o .h .a
 
 LIB_TARGETS = lib
 
-LIB_CC_OBJECTS = ran1.o ran.o point.o treeNode.o atom.o atomIterator.o residue.o chain.o residueTemplate.o allowedResidue.o secondaryStructure.o chainPosition.o residueIterator.o chainModBuffer.o molecule.o protein.o ensemble.o CMath.o generalio.o ligand.o pdbData.o pdbReader.o pdbWriter.o amberVDW.o aaBaseline.o amberElec.o rotamer.o rotamerLib.o annealer.o PDBAtomRecord.o PDBInterface.o ruler.o line.o lineSegment.o unitSphere.o solvation.o helixPropensity.o ligandTemplate.o parse.o pmf.o microEnvDB.o microEnvironment.o ramachandranMap.o
+LIB_CC_OBJECTS = ran1.o ran.o point.o treeNode.o atom.o atomIterator.o residue.o chain.o residueTemplate.o allowedResidue.o secondaryStructure.o chainPosition.o residueIterator.o chainModBuffer.o molecule.o protein.o ensemble.o CMath.o generalio.o pdbData.o pdbReader.o pdbWriter.o amberVDW.o aaBaseline.o amberElec.o rotamer.o rotamerLib.o annealer.o PDBAtomRecord.o PDBInterface.o ruler.o line.o lineSegment.o unitSphere.o helixPropensity.o parse.o ramachandranMap.o
 
 #DEFS = -DHAVE_OPENGL=1 -D_ALLOWED_RESIDUE_DEBUG
 #DEFS = -DHAVE_OPENGL=1 -D__STL_USE_EXCEPTIONS
@@ -33,8 +33,9 @@ FLAG_OPT3 = -Wall -O3  -g -felide-constructors -Wno-deprecated
 FLAG_PROF = -Wall -O3 -felide-constructors -pg -Wno-deprecated
 FLAG_DEBUG = -Wall -g2 -felide-constructors -Wno-deprecated
 FLAG_DEBUG2 = -Wall -g2 -ansi -pedantic -Wno-deprecated
+FLAG_OPTMAX = -Wall -O2 -ftree-vectorize -march=native -mtune=native -pipe -msse3 -Wno-deprecated -fopenmp
 
-CFLAGS = $(FLAG_DEBUG2) $(DEFS)
+CFLAGS = $(FLAG_OPTMAX) $(DEFS)
 FFLAGS = -Wall -g 
 
 INC_BASE = -I$(SRCDIR)/ensemble -I$(SRCDIR)/io \
@@ -68,10 +69,6 @@ libprotcad.a : $(LIB_CC_OBJECTS) $(LIB_F77_OBJECTS)
 example : libprotcad.a example.cc
 	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
 	cd $(OBJDIR) && mv $@ $(BINDIR)
-
-$(LIB_F77_OBJECTS): %.o: %.f
-	$(F77) -c $(FFLAGS) $^ -o $@
-	mv $@ $(OBJDIR)
 
 $(LIB_CC_OBJECTS): %.o: %.cc %.h
 	$(CXX) -c $(CFLAGS) $(INC_BASE) $< -o $@

@@ -22,11 +22,6 @@
 #include "molecule.h"
 #endif
 
-#ifndef LIGAND_H
-#include "ligand.h"
-#endif
-
-
 class residueTemplate;
 
 #ifndef RESIDUE_H
@@ -163,8 +158,11 @@ public:
 	bool isBonded(atom* _pAtom1, atom* _pAtom2);
 	bool isBonded(UInt _index1, UInt _index2);
 	bool isSeparatedByFewBonds(UInt _index1, UInt _index2);
+    UInt getBondSeparation(UInt _index1, UInt _index2);
 	bool isSeparatedByFewBonds(residue* _pRes1,UInt _index1,
 		       residue* _pRes2, UInt _index2);
+    UInt getBondSeparation(residue* _pRes1,UInt _index1,
+               residue* _pRes2, UInt _index2);
 	atom* getAtom(UInt _index)
 		{	if (_index < itsAtoms.size())
 			{	return itsAtoms[_index];
@@ -216,6 +214,7 @@ public:
 	void rotate_new(atom* _pivotAtom, const dblMat& _RMatrix);
 	void rotate_new(atom* _pivotAtom, atom* _firstAtom, const dblMat& _RMatrix);
 	string getTypeStringFromAtomNum(UInt _atomNum) { return itsAtoms[_atomNum]->getType(); }
+	string getNameStringFromAtomNum(UInt _atomNum) { return itsAtoms[_atomNum]->getName(); }
 	void translate(dblVec* _pDoubleVector);
 	void translate(const dblVec& _dblVec);
 	void recursiveTranslateWithDirection(dblVec& _dblVec, UInt _direction);
@@ -237,11 +236,13 @@ public:
 	double intraSoluteEnergy();
 	vector <double> calculateDielectric(residue* _other, UInt _atomIndex);
 	vector <double> calculateDielectric(residue* _other, atom* _atom);
+	vector <double> calculateDielectric(atom* _atom);
     vector <double> calculateSolvationEnergy(UInt _atomIndex);
+    double getSolvationEnergy();
+    double getDielectric();
 	double getIntraEnergy(const UInt atom1, residue* _other, const UInt atom2);
 	double interEnergy(residue* _other);
 	double interSoluteEnergy(residue* _other);
-     double interEnergy(ligand* _other);
 	double getSelfEnergy(residue* _other);
 	double calculateHCA_O_hBondEnergy(residue* _other);
 	double BBEnergy();
@@ -255,6 +256,8 @@ public:
 	static double getOneFourAmberElecScaleFactor() { return oneFourAmberElecScaleFactor; }
 	*/
 	double getVolume(UInt _method);
+    bool notHydrogen(UInt _atomIndex);
+    double getTotalVolumeofBondedAtoms(UInt _atomIndex);
 
 private:
 	double wodakVolume();
@@ -307,6 +310,7 @@ public:
 	void printMainChain() const;
 	void printBranchPoints() const;
 	int getResNum() const {return itsResNum;}
+    double getRadius(UInt atomIndex) {return itsAtoms[atomIndex]->getRadius();}
     static UInt getHowMany() {return howMany;}
 	void setResNum(const UInt _num) {itsResNum = _num;}
 	UInt getNumAtoms() const {return itsAtoms.size();}
@@ -323,6 +327,8 @@ public:
 	bool getPolarHydorgensOn() const {return polarHydrogensOn;}
 	void setPolarHydrogensOn(const bool _polarHydrogensOn);
 	bool getHasPolarHRotamers() const {return dataBase[itsType].getHasPolarHRotamers(); }
+    void setMoved (UInt _moved);
+    UInt getMoved() const {return moved;}
         
 // ***********************************************************************
 // ***********************************************************************
@@ -337,12 +343,18 @@ public:
     static void setupDataBase(const bool _Hflag, const bool _HPflag);
 	static double getCutoffDistance() {return cutoffDistance; }
 	static void setCutoffDistance( const double _cutoff ) { cutoffDistance = _cutoff; cutoffDistanceSquared = _cutoff*_cutoff; }
+    static void setTemperature( const double _temp ) { temperature = _temp; }
+    static void setElectroSolvationScaleFactor( const double _Esolv ) { EsolvationFactor = _Esolv; }
+    static double getElectroSolvationScaleFactor() { return EsolvationFactor; }
+    static void setHydroSolvationScaleFactor( const double _Hsolv ) { HsolvationFactor = _Hsolv; }
+    static double getHydroSolvationScaleFactor() { return HsolvationFactor; }
+
 
 // ***********************************************************************
 // ***********************************************************************
 //	Variables
 // ***********************************************************************
-// ***********************************************************************
+// ***********************************************************************Cutoff
 
 private:
 	//variable declarations
@@ -352,8 +364,9 @@ private:
 	residue* pItsNextRes;
 	residue* pItsPrevRes;
 	bool hydrogensOn;
-        bool polarHydrogensOn;
+    bool polarHydrogensOn;
 	bool isArtificiallyBuilt;
+    UInt moved;
 
 	//variables relating to the rotameric state
 	//or lack thereof....
@@ -371,8 +384,12 @@ private:
 	private:
 	static UInt howMany;
 	static bool dataBaseBuilt;
+    static double temperature;
+    static double EsolvationFactor;
+    static double HsolvationFactor;
 	static double cutoffDistance;
 	static double cutoffDistanceSquared;
+    static double cutoffCubeVolume;
 };
 
 #endif

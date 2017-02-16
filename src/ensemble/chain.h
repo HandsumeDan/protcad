@@ -15,10 +15,6 @@
 class atomIterator;
 #endif
 
-#ifndef LIGAND_H
-#include "ligand.h"
-#endif
-
 #ifndef CHAIN_H
 #define CHAIN_H
 //#warning "chain.h read in"
@@ -70,12 +66,14 @@ public:
 	char getChainID() {return itsChainID;}
 	residue* getResidue(UInt _resIndex) { return itsResidues[_resIndex]; }
 	UInt getTypeFromResNum(UInt _resNum) { return itsResidues[_resNum]->getTypeIndex(); }
+    double getRadius(UInt resIndex, UInt atomIndex) {return itsResidues[resIndex]->getRadius(atomIndex);}
 	string getTypeStringFromAtomNum(UInt _resNum, UInt _atomNum) { return itsResidues[_resNum]->getTypeStringFromAtomNum( _atomNum); }
 	string getTypeStringFromResNum(UInt _resNum) {return itsResidues[_resNum]->getType();}
 	double getAtomCharge(UInt _resNum, UInt _atomNum) { return itsResidues[_resNum]->getAtomCharge(_atomNum); }
 	void mutate(const UInt _indexInChain, const UInt _aaType);
 	void mutateWithoutBuffering(const UInt _indexInChain, const UInt _aaType);
-	void fixBrokenResidue(const UInt _indexInChain);
+    void fixBrokenResidue(const UInt _indexInChain);
+    void fixBrokenResidue(const UInt _indexInChain, bool withRotamer);
 	void redoModification(chainModBuffer _redoBuffer);
 	void makeAtomSilent(const UInt _resIndex, const UInt _atomIndex);
 
@@ -116,9 +114,13 @@ public:
 	void listChiDefinitions() const;
 	UInt getNumChis(const UInt _resIndex, const UInt _bpt);
 
+    void setMoved (UInt resIndex, UInt _moved) {itsResidues[resIndex]->setMoved(_moved);}
+    double getSolvationEnergy(const UInt _resIndex) {return itsResidues[_resIndex]->getSolvationEnergy();}
+    double getDielectric(const UInt _resIndex) {return itsResidues[_resIndex]->getDielectric();}
 	UIntVec getActiveResidues() { return itsRepackActivePositionMap;}
 	void setRotamerNotAllowed (const UInt _indexInChain, const UInt aaType, const UInt _bpt, const UInt _rotamer);
 	UIntVec getAllowedRotamers ( const UInt _indexInChain, const UInt  _aaType, const UInt _bpt);
+    vector <UIntVec> getAllowedRotamers ( const UInt _indexInChain, const UInt  _aaType);
 	void setResNotAllowed(const UInt _indexInChain, const UInt _aaType);
 	void setResAllowed(const UInt _indexInChain, const UInt _aaType);
 	UIntVec getResAllowed (const UInt _indexInChain);
@@ -197,8 +199,7 @@ public:
 	double interSoluteEnergy(chain* _other);
 	double getInterEnergy(const UInt _res1, chain* _other, const UInt _res2);
 	double getInterEnergy(const UInt _residue1, const UInt _atom1, chain* _other, const UInt _residue2, const UInt _atom2);
-        
-     double getInterEnergy(ligand* _other);
+
 	double BBEnergy();
 
 	double getSelfEnergy(UInt _residueIndex);
